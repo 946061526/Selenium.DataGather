@@ -1,0 +1,9 @@
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\bin\Debug\DataGather.exe.config
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\bin\Debug\DataGather.exe
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\bin\Debug\DataGather.pdb
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\obj\Debug\DataGather.csproj.CoreCompileInputs.cache
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\obj\Debug\DataGather.exe
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\obj\Debug\DataGather.pdb
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\bin\Debug\WebDriver.dll
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\bin\Debug\WebDriver.xml
+C:\Users\Administrator\Desktop\DataGather\DataGather\DataGather\obj\Debug\DataGather.csprojResolveAssemblyReference.cache
