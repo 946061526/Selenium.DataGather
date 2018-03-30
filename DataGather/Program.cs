@@ -8,28 +8,206 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Configuration;
+using System.IO;
+using System.Text.RegularExpressions;
+using System.Text;
 
 namespace DataGather
 {
     class Program
     {
         static string url = ConfigurationManager.AppSettings["url"].ToString();
-        static string proxyServerIP = ConfigurationManager.AppSettings["proxyServerIP"].ToString();
-        static string proxyServerPort = ConfigurationManager.AppSettings["proxyServerPort"].ToString();
+        static string urlType = ConfigurationManager.AppSettings["urlType"].ToString();
+        static string dataSavePath = ConfigurationManager.AppSettings["dataSavePath"].ToString();
+        static string tmpDataPath = "tmpData.txt";
+
+        //static string proxyServerIP = ConfigurationManager.AppSettings["proxyServerIP"].ToString();
+        //static string proxyServerPort = ConfigurationManager.AppSettings["proxyServerPort"].ToString();
+
 
         static void Main(string[] args)
         {
+            if (urlType == "1")
+                GatherTmallProDetail();
+            else if (urlType == "2")
+                GatherTmall();
+            else if (urlType == "3")
+                GatherJD();
+
             //Task t1 = new Task(GatherTmallTask);
             //Console.WriteLine(t1.Status);
             //t1.Start();
             //t1.Wait();
 
-            GatherJD();
+            //GatherJD();
         }
 
-        static public void GatherTmallTask()
+        /// <summary>
+        /// 天猫商品详情页数据
+        /// </summary>
+        static void GatherTmallProDetail()
         {
-            int i = 0;
+            if (string.IsNullOrEmpty(url))
+                url = "https://detail.tmall.com/item.htm?spm=a220m.1000858.1000725.6.65ad5cb28figxk&id=560558686226&skuId=3503382888333&areaId=440300&standard=1&user_id=1776456424&cat_id=2&is_b=1&rn=bb45738939e159e7978ac0c15c8826e9";
+            IWebDriver driver = new PhantomJSDriver();
+            try
+            {
+                driver.Navigate().GoToUrl(url);
+                Thread.Sleep(500);
+                var html = driver.PageSource;
+                string str = getRegStr(html);
+                if (str.Length > 0)
+                {
+                    var s = str.IndexOf("api");
+                    var e = str.LastIndexOf("})();");
+
+                    str = str.Substring(s, e - s);
+                    str = str.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(");", "").Trim();
+                    str = "{\"" + str;
+
+                    WriteToTxt(str, tmpDataPath, FileMode.Create);
+
+                    string jsonStr = ReadFromTxt(tmpDataPath);
+                    GetData(jsonStr);
+                }
+                else
+                    Console.WriteLine("------数据匹配失败------");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                driver.Quit();
+                Console.WriteLine("------程序已终止------");
+            }
+            Console.Read();
+        }
+
+
+        #region 数据处理
+
+        /// <summary>
+        /// 正则匹配出相关数据
+        /// </summary>
+        /// <param name="oldStr"></param>
+        /// <param name="reg"></param>
+        /// <returns></returns>
+        static string getRegStr(string oldStr, string reg = @"<script>[\s\S]*?</script>")
+        {
+            var matchVal = string.Empty;
+            MatchCollection mc = Regex.Matches(oldStr, reg);
+            for (int i = 0; i < mc.Count; i++)
+            {
+                Match m = mc[i];
+                if (m.Value.IndexOf("TShop.poc(") >= 0)
+                {
+                    matchVal = m.Value;
+                    break;
+                }
+            }
+            return matchVal;
+        }
+
+        /// <summary>
+        /// 将Json缓存至txt
+        /// </summary>
+        /// <param name="str"></param>
+        static void WriteToTxt(string str, string filePath, FileMode mode = FileMode.Create, FileAccess fileAccess = FileAccess.ReadWrite)
+        {
+            //判断路径是否存在
+            if (!File.Exists(filePath))
+                File.Create(filePath);
+
+            FileStream file = new FileStream(filePath, mode, fileAccess);
+            using (StreamWriter writer = new StreamWriter(file))
+            {
+                writer.Write(str);
+                writer.Flush();
+                writer.Close();
+            }
+            //关闭文件
+            file.Close();
+            //释放对象
+            file.Dispose();
+        }
+
+        /// <summary>
+        /// 从txt读取要解析的json数据
+        /// </summary>
+        /// <returns></returns>
+        static string ReadFromTxt(string filePath)
+        {
+            var strJson = "";
+            using (FileStream fs = new FileStream(filePath, FileMode.Open))
+            {
+                using (StreamReader sr = new StreamReader(fs, Encoding.UTF8))
+                {
+                    strJson = sr.ReadToEnd();
+                }
+            }
+            return strJson;
+        }
+
+        /// <summary>
+        /// 得到最后的数据，并保存至txt
+        /// </summary>
+        /// <param name="strJson"></param>
+        static void GetData(string strJson)
+        {
+            var sb = new StringBuilder();
+            try
+            {
+                var obj = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(strJson);
+                var skuMap = obj.valItemInfo.skuMap;
+                var skuList = obj.valItemInfo.skuList;
+
+                foreach (var item in skuMap)
+                {
+                    foreach (var childItem in item)
+                    {
+                        var skuId = childItem.skuId;
+                        var price = childItem.price;
+                        var name = "";
+                        foreach (var skuItem in skuList)
+                        {
+                            if (skuItem.skuId == skuId)
+                            {
+                                name = skuItem.names;
+                                Console.WriteLine(childItem.skuId + "--" + name + ": " + price);
+
+                                sb.AppendFormat("{0}：{1}\r\n", name, price);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+            finally
+            {
+                if (sb.Length > 0)
+                    WriteToTxt(sb.ToString(), dataSavePath, FileMode.Append, FileAccess.Write);
+
+                Console.WriteLine("---本次执行结束，数据已保存至" + dataSavePath + "---");
+            }
+            Console.ReadKey();
+        }
+        #endregion
+
+
+        #region 搜索列表页
+
+        /// <summary>
+        /// 天猫搜索列页表数据
+        /// </summary>
+        static public void GatherTmall()
+        {
+            var i = 0;
             IWebDriver driver = new PhantomJSDriver();
             //IWebDriver driver = new FirefoxDriver();
             //IWebDriver driver = new ChromeDriver();
@@ -40,7 +218,6 @@ namespace DataGather
 
                 driver.Navigate().GoToUrl(url);
                 Thread.Sleep(500);
-                //var divContent = driver.FindElement(By.Id("content"));
                 var pageCount = Convert.ToInt16(driver.FindElement(By.XPath("//input[@name='totalPage']")).GetAttribute("value"));
                 IWebElement nextBtn;
                 for (var p = 1; p <= pageCount; p++)
@@ -52,9 +229,10 @@ namespace DataGather
                     IList<IWebElement> proList = driver.FindElements(By.XPath("//div[@id='J_ItemList']/div[@class='product  ']/div"));
                     foreach (var item in proList)
                     {
-                        i++;
                         if (item.FindElements(By.ClassName("productTitle")).Count == 0)
                             continue;
+
+                        i++;
                         IWebElement titleDiv = item.FindElement(By.ClassName("productTitle"));
                         IWebElement priceDiv = item.FindElement(By.TagName("em"));
                         string title = titleDiv != null ? titleDiv.Text : "";
@@ -80,9 +258,12 @@ namespace DataGather
             Console.Read();
         }
 
+        /// <summary>
+        /// 京东搜索列表页数据
+        /// </summary>
         private static void GatherJD()
         {
-            int i = 0;
+            var i = 0;
             IWebDriver driver = new PhantomJSDriver();
             try
             {
@@ -101,6 +282,7 @@ namespace DataGather
                     {
                         if (item.FindElements(By.ClassName("p-name")).Count == 0)
                             continue;
+
                         i++;
                         IWebElement titleDiv = item.FindElement(By.ClassName("p-name"));
                         IWebElement priceDiv = item.FindElement(By.ClassName("p-price")).FindElement(By.TagName("i"));
@@ -126,6 +308,8 @@ namespace DataGather
             Console.Read();
         }
 
+        #endregion
+
         private static PhantomJSDriverService GetPhantomJSDriverService()
         {
             PhantomJSDriverService pds = PhantomJSDriverService.CreateDefaultService();
@@ -135,5 +319,6 @@ namespace DataGather
             //pds.ProxyAuthentication = GetProxyAuthorization();
             return pds;
         }
+
     }
 }
