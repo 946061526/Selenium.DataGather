@@ -42,6 +42,7 @@ namespace DataGather
             //GatherJD();
         }
 
+        static string proTitle = string.Empty;//商品名称
         /// <summary>
         /// 天猫商品详情页数据
         /// </summary>
@@ -49,12 +50,20 @@ namespace DataGather
         {
             if (string.IsNullOrEmpty(url))
                 url = "https://detail.tmall.com/item.htm?spm=a220m.1000858.1000725.6.65ad5cb28figxk&id=560558686226&skuId=3503382888333&areaId=440300&standard=1&user_id=1776456424&cat_id=2&is_b=1&rn=bb45738939e159e7978ac0c15c8826e9";
+
+            Console.WriteLine(" ");
+            Console.WriteLine("正在解析url...");
             IWebDriver driver = new PhantomJSDriver();
             try
             {
                 driver.Navigate().GoToUrl(url);
                 Thread.Sleep(500);
+                Console.WriteLine(" ");
+                Console.WriteLine("url解析成功，即将进行数据采集...");
+
+                proTitle = driver.FindElement(By.XPath("//li[@class='tm-relate-current']/span")).GetAttribute("title");
                 var html = driver.PageSource;
+
                 string str = getRegStr(html);
                 if (str.Length > 0)
                 {
@@ -64,8 +73,8 @@ namespace DataGather
                     str = str.Substring(s, e - s);
                     str = str.Replace("\r", "").Replace("\n", "").Replace("\t", "").Replace(");", "").Trim();
                     str = "{\"" + str;
-
                     WriteToTxt(str, tmpDataPath, FileMode.Create);
+                    Thread.Sleep(1000);
 
                     string jsonStr = ReadFromTxt(tmpDataPath);
                     GetData(jsonStr);
@@ -114,13 +123,9 @@ namespace DataGather
         /// 将Json缓存至txt
         /// </summary>
         /// <param name="str"></param>
-        static void WriteToTxt(string str, string filePath, FileMode mode = FileMode.Create, FileAccess fileAccess = FileAccess.ReadWrite)
+        static void WriteToTxt(string str, string filePath, FileMode mode = FileMode.Create, FileAccess fileAccess = FileAccess.ReadWrite, FileShare fileShare = FileShare.ReadWrite)
         {
-            //判断路径是否存在
-            if (!File.Exists(filePath))
-                File.Create(filePath);
-
-            FileStream file = new FileStream(filePath, mode, fileAccess);
+            FileStream file = new FileStream(filePath, mode, fileAccess, FileShare.ReadWrite);
             using (StreamWriter writer = new StreamWriter(file))
             {
                 writer.Write(str);
@@ -131,6 +136,11 @@ namespace DataGather
             file.Close();
             //释放对象
             file.Dispose();
+        }
+
+        static bool IsExistFile(string _filePath)
+        {
+            return File.Exists(_filePath);
         }
 
         /// <summary>
@@ -159,6 +169,10 @@ namespace DataGather
             var sb = new StringBuilder();
             try
             {
+                Console.WriteLine(" ");
+                Console.WriteLine("采到以下数据数据，将保存至" + dataSavePath);
+                Console.WriteLine(" ");
+
                 var obj = Newtonsoft.Json.JsonConvert.DeserializeObject<dynamic>(strJson);
                 var skuMap = obj.valItemInfo.skuMap;
                 var skuList = obj.valItemInfo.skuList;
@@ -175,9 +189,9 @@ namespace DataGather
                             if (skuItem.skuId == skuId)
                             {
                                 name = skuItem.names;
-                                Console.WriteLine(childItem.skuId + "--" + name + ": " + price);
+                                Console.WriteLine(proTitle + "，" + name + "， " + price);
 
-                                sb.AppendFormat("{0}：{1}\r\n", name, price);
+                                sb.AppendFormat("{2}，{0}，{1}\r\n", name, price, proTitle);
                                 break;
                             }
                         }
@@ -191,13 +205,23 @@ namespace DataGather
             finally
             {
                 if (sb.Length > 0)
-                    WriteToTxt(sb.ToString(), dataSavePath, FileMode.Append, FileAccess.Write);
-
-                Console.WriteLine("---本次执行结束，数据已保存至" + dataSavePath + "---");
+                {
+                    FileMode fmode = FileMode.OpenOrCreate;
+                    FileAccess faccess = FileAccess.ReadWrite;
+                    if (IsExistFile(dataSavePath))
+                    {
+                        fmode = FileMode.Append;
+                        faccess = FileAccess.Write;
+                    }
+                    WriteToTxt(sb.ToString(), dataSavePath, fmode, faccess);
+                }
+                Console.WriteLine("  ");
+                Console.WriteLine("本次执行结束，数据已保存至" + dataSavePath);
             }
             Console.ReadKey();
         }
         #endregion
+
 
 
         #region 搜索列表页
